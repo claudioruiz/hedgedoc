@@ -66,13 +66,19 @@ export class HistoryService {
    * @return {HistoryEntry} the requested history entry
    */
   private async getEntryByNote(note: Note, user: User): Promise<HistoryEntry> {
-    return await this.historyEntryRepository.findOne({
+    const entry = await this.historyEntryRepository.findOne({
       where: {
         note: note,
         user: user,
       },
       relations: ['note', 'user'],
     });
+    if (!entry) {
+      throw new NotInDBError(
+        `User '${user.userName}' has no HistoryEntry for Note with id '${note.id}'`,
+      );
+    }
+    return entry;
   }
 
   /**
@@ -90,19 +96,23 @@ export class HistoryService {
     pinStatus?: boolean,
     lastVisited?: Date,
   ): Promise<HistoryEntry> {
-    let entry = await this.getEntryByNote(note, user);
-    if (!entry) {
-      entry = HistoryEntry.create(user, note);
-      if (pinStatus !== undefined) {
-        entry.pinStatus = pinStatus;
-      }
-      if (lastVisited !== undefined) {
-        entry.updatedAt = lastVisited;
-      }
-    } else {
+    try {
+      const entry = await this.getEntryByNote(note, user);
       entry.updatedAt = new Date();
+      return await this.historyEntryRepository.save(entry);
+    } catch (e) {
+      if (e instanceof NotInDBError) {
+        const entry = HistoryEntry.create(user, note);
+        if (pinStatus !== undefined) {
+          entry.pinStatus = pinStatus;
+        }
+        if (lastVisited !== undefined) {
+          entry.updatedAt = lastVisited;
+        }
+        return await this.historyEntryRepository.save(entry);
+      }
+      throw e;
     }
-    return await this.historyEntryRepository.save(entry);
   }
 
   /**
@@ -119,11 +129,6 @@ export class HistoryService {
     updateDto: HistoryEntryUpdateDto,
   ): Promise<HistoryEntry> {
     const entry = await this.getEntryByNoteIdOrAlias(noteIdOrAlias, user);
-    if (!entry) {
-      throw new NotInDBError(
-        `User '${user.userName}' has no HistoryEntry for Note with id '${noteIdOrAlias}'`,
-      );
-    }
     entry.pinStatus = updateDto.pinStatus;
     return await this.historyEntryRepository.save(entry);
   }
@@ -137,11 +142,6 @@ export class HistoryService {
    */
   async deleteHistoryEntry(noteIdOrAlias: string, user: User): Promise<void> {
     const entry = await this.getEntryByNoteIdOrAlias(noteIdOrAlias, user);
-    if (!entry) {
-      throw new NotInDBError(
-        `User '${user.userName}' has no HistoryEntry for Note with id '${noteIdOrAlias}'`,
-      );
-    }
     await this.historyEntryRepository.remove(entry);
     return;
   }

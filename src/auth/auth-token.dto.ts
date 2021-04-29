@@ -15,8 +15,8 @@ export class AuthTokenDto {
   createdAt: Date;
   @IsDate()
   @IsOptional()
-  validUntil: Date;
+  validUntil?: Date;
   @IsDate()
   @IsOptional()
-  lastUsed: Date;
+  lastUsed?: Date;
 }
